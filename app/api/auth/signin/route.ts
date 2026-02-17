@@ -1,7 +1,6 @@
 import { Login } from "@/app/lib/auth/auth";
-import { cookies } from "next/headers";
 import bcrypt from "bcrypt";
-import { createToken } from "@/app/lib/auth/jwt";
+import { createSessionKeys } from "@/app/lib/auth/session";
 
 export async function POST(req: Request) {
   const body = await req.json();
@@ -16,24 +15,8 @@ export async function POST(req: Request) {
     if (!isValid) {
       return Response.json({ message: "please check your password." });
     }
-    const accessToken = await createToken(user.id, true);
-    const refreshToken = await createToken(user.id, false);
-
-    if (!refreshToken) {
-      return Response.json(
-        { message: "No refresh token generated" },
-        { status: 500 },
-      );
-    }
-
-    const cookieStore = await cookies();
-    cookieStore.set("refreshToken", refreshToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: "strict",
-      path: "/",
-    });
-    Response.json({
+    const accessToken = await createSessionKeys(user.id,user.role);
+    return Response.json({
       message: "Successfully logged in.",
       accessToken: accessToken,
     });

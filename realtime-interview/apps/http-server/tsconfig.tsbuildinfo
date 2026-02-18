@@ -1,0 +1,1 @@
+{"root":["./src/server.ts","./src/controllers/user.controller.ts","./src/lib/auth.ts","./src/lib/jwt.ts","./src/lib/session.ts","./src/routes/user.route.ts"],"version":"5.9.2"}

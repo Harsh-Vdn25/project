@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
 
 export async function createToken(
-  id: number,
+  id: string,
   role: string,
   isAccessToken: boolean,
 ) {

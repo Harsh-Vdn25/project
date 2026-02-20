@@ -28,14 +28,31 @@ async function main() {
 
       switch (message.type) {
         case messageTypes.CREATE_ROOM:
-          meetManager.createRoom(user, socket);
+          meetManager.createRoom(user, message.language, socket); //validate the input later
           break;
-        case messageTypes.JOIN_ROOM:
+        
+          case messageTypes.JOIN_ROOM:
           if (!message.roomId)
             return socket.send(
               JSON.stringify({ message: "incomplete request." }),
             );
           meetManager.joinRoom(user, message.roomId, socket);
+          break;
+
+        case messageTypes.MESSAGE:
+          if (user.role === "ADMIN") {
+            const roomId = message.roomId;
+            const codeInfo = message.codeIndo;
+            meetManager.handleMessage(message,socket);
+          } else {
+            socket.send(JSON.stringify({ message: "Only admin can send." }));
+          }
+          break;
+        case messageTypes.END_MEETING:
+          if(user.role === "ADMIN"){
+            if(!message.roomId)return socket.send(JSON.stringify({message: "Need roomId to end_meeting."}));
+            meetManager.endMeeting(message.roomId);
+          }
           break;
         default:
           socket.send(JSON.stringify({ message: "Unknown message type." }));

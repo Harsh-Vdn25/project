@@ -20,7 +20,6 @@ export const Signin = async (req: Request, res: Response) => {
     if (!isValid) {
       return res.status(401).json({ message: "Invalid credentials." });
     }
-
     const tokens = await createSessionKeys(user.id, user.role);
 
     res.cookie("refreshToken", tokens.refresh, {

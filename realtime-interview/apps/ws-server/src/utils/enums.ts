@@ -1,5 +1,8 @@
 export enum messageTypes{
     CREATE_ROOM = "CREATE ROOM",
     JOIN_ROOM = "JOIN ROOM",
-    MESSAGE = "MESSAGE"
+    MESSAGE = "MESSAGE",
+    REMOVE_MEMBER = "REMOVE MEMBER",
+    SEND_CODE = "SEND CODE",
+    END_MEETING = "END MEETING"
 }

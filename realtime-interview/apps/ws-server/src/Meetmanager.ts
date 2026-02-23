@@ -28,6 +28,7 @@ export class Meetmanager {
     const roomId = randomUUID();
     const meet = new Meet(user.id, socket, language, roomId);
     this.meets.push(meet);
+    (socket as any).roomId = roomId;
     socket.send(
       JSON.stringify({
         type: "ROOM_CREATED",
@@ -58,6 +59,7 @@ export class Meetmanager {
         }
       }
       roomData.addMember(user.id, socket);
+      (socket as any).roomId = roomId;
     } else {
       socket.send(JSON.stringify({ message: "Room doesn't exist." }));
     }
@@ -104,19 +106,24 @@ export class Meetmanager {
             }),
           );
         }
-        meet.removeMember(memberId,socket);
+        meet.removeMember(memberId);
     }
   }
 
   endMeeting(roomId: string){
     for(let i=0;i<this.meets.length;i++){
-      console.log(this.meets[i]?.roomId);
       if(this.meets[i]?.roomId === roomId){
         this.meets[i]?.admin.adminSocket.send(JSON.stringify({message: "Meeting ended successfully."}));
         this.meets[i]?.members.map(x=>x.member.send(JSON.stringify({message: "Meeting ended."})));
         this.meets.splice(i,1);
         break;
       }
+    }
+  }
+  callRemoveMember(id:string,roomId:string){
+    const meet = this.meets.find(x=>x.roomId === roomId);
+    if(meet){
+      meet.removeMember(id);
     }
   }
 }

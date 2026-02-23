@@ -58,6 +58,15 @@ async function main() {
           socket.send(JSON.stringify({ message: "Unknown message type." }));
       }
     });
+
+    socket.on('close',()=>{
+      const user = (socket as any).user;
+      const roomId = (socket as any).roomId;
+
+      if(user.role === "USER" && (!roomId && typeof roomId !== 'string')){
+        meetManager.callRemoveMember(user.id,roomId);
+      }
+    })
   });
 }
 main();

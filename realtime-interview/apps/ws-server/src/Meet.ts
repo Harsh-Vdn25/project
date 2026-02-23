@@ -50,7 +50,7 @@ export class Meet {
     );
   }
 
-  removeMember(memberId: string, adminSocket: WebSocket) {
+  removeMember(memberId: string) {
     var removed = false;
     for (let i = 0; i < this.members.length; i++) {
       if (this.members[i]?.id === memberId) {
@@ -59,8 +59,9 @@ export class Meet {
         break;
       }
     }
-    if (removed) {
-      return adminSocket.send(
+    
+    if (removed ) {
+      return this.admin.adminSocket.send(
         JSON.stringify({ memberId: memberId, message: "Removed the user" }),
       );
     }

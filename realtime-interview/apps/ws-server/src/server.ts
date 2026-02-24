@@ -18,7 +18,7 @@ async function main() {
 
     if (decoded.role === "ADMIN" || decoded.role === "USER") {
       (socket as any).user = { id: decoded.id, role: decoded.role };
-      socket.send(JSON.stringify({ message: "Connection successful." }));
+      return socket.send(JSON.stringify({ message: "Connection successful." }));
     }
 
     socket.on("message", (data) => {
@@ -65,6 +65,8 @@ async function main() {
 
       if(user.role === "USER" && (!roomId && typeof roomId !== 'string')){
         meetManager.callRemoveMember(user.id,roomId);
+      }else if(user.role === "ADMIN"){
+        meetManager.handleAdminDisconnect(user.id);
       }
     })
   });

@@ -20,9 +20,17 @@ export class Meetmanager {
 
     const isEngaged = this.meets.find((x) => x.admin.id === user.id);
     if (isEngaged) {
-      return socket.send(
-        JSON.stringify({ message: "You already part of a room." }),
-      );
+      if (isEngaged.cleanUpTimer) {
+        isEngaged.admin.adminSocket = socket;
+        isEngaged.handleAdminRejoin();
+
+        return socket.send(
+          JSON.stringify({
+            type: messageTypes.ADMIN_RECONNECTED,
+            message: "You reconnected to the room.",
+          }),
+        );
+      }
     }
 
     const roomId = randomUUID();
@@ -77,7 +85,7 @@ export class Meetmanager {
     const roomId = message.roomId;
     const adminId = (socket as any).id;
     const meet = this.meets.find(
-      (x) => x.roomId === roomId && x.admin.id === adminId
+      (x) => x.roomId === roomId && x.admin.id === adminId,
     );
 
     if (!meet)
@@ -92,7 +100,7 @@ export class Meetmanager {
         if (!codeInfo)
           return socket.send(
             JSON.stringify({
-              message: "Please send the code and the language."
+              message: "Please send the code and the language.",
             }),
           );
         meet.sendCode(codeInfo);
@@ -110,20 +118,36 @@ export class Meetmanager {
     }
   }
 
-  endMeeting(roomId: string){
-    for(let i=0;i<this.meets.length;i++){
-      if(this.meets[i]?.roomId === roomId){
-        this.meets[i]?.admin.adminSocket.send(JSON.stringify({message: "Meeting ended successfully."}));
-        this.meets[i]?.members.map(x=>x.member.send(JSON.stringify({message: "Meeting ended."})));
-        this.meets.splice(i,1);
+  endMeeting(roomId: string) {
+    for (let i = 0; i < this.meets.length; i++) {
+      if (this.meets[i]?.roomId === roomId) {
+        this.meets[i]?.admin.adminSocket.send(
+          JSON.stringify({ message: "Meeting ended successfully." }),
+        );
+        this.meets[i]?.members.map((x) =>
+          x.member.send(JSON.stringify({ message: "Meeting ended." })),
+        );
+        this.meets.splice(i, 1);
         break;
       }
     }
   }
-  callRemoveMember(id:string,roomId:string){
-    const meet = this.meets.find(x=>x.roomId === roomId);
-    if(meet){
+  callRemoveMember(id: string, roomId: string) {
+    const meet = this.meets.find((x) => x.roomId === roomId);
+    if (meet) {
       meet.removeMember(id);
     }
+  }
+
+  handleAdminDisconnect(adminId: string) {
+    const meet = this.meets.find((x) => x.admin.id === adminId);
+    if (!meet) return;
+
+    meet.cleanUpTimer = setTimeout(
+      () => {
+        this.endMeeting(meet.roomId);
+      },
+      2 * 60 * 1000,
+    );
   }
 }

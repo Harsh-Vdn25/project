@@ -14,6 +14,8 @@ export class Meet {
   //lets consider the coding language is same for all the members
   private codeInfo: codeInfoType;
   private startTime: number;
+  public cleanUpTimer:any;
+  public adminDisconnectedAt:Date | undefined;
   constructor(
     adminId: string,
     socket: WebSocket,
@@ -28,6 +30,8 @@ export class Meet {
     this.roomId = roomId;
     this.codeInfo = { language, code: "" };
     this.startTime = Date.now();
+    this.cleanUpTimer = undefined;
+    this.adminDisconnectedAt = undefined;
   }
 
   addMember(id: string, member: WebSocket) {
@@ -59,11 +63,17 @@ export class Meet {
         break;
       }
     }
-    
+
     if (removed ) {
       return this.admin.adminSocket.send(
         JSON.stringify({ memberId: memberId, message: "Removed the user" }),
       );
     }
+  }
+
+  handleAdminRejoin(){
+    clearTimeout(this.cleanUpTimer);
+    this.cleanUpTimer = undefined;
+    this.adminDisconnectedAt = undefined;
   }
 }

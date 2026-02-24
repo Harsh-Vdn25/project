@@ -1,15 +1,15 @@
 import { WebSocket } from "ws";
-import { v4 as randomUUID } from "uuid";
 import { Meet } from "./Meet";
 import { codeInfoType, languageType, userType } from "./utils/types";
 import { messageTypes } from "./utils/enums";
+import { prisma } from "@repo/db";
 
 export class Meetmanager {
   private meets: Meet[];
   constructor() {
     this.meets = [];
   }
-  createRoom(user: userType, language: languageType, socket: WebSocket) {
+  async createRoom(user: userType, language: languageType, socket: WebSocket) {
     if (user.role !== "ADMIN") {
       return socket.send(
         JSON.stringify({
@@ -32,8 +32,9 @@ export class Meetmanager {
         );
       }
     }
+    const room = await prisma.room.create({ data: { adminId: user.id } });
 
-    const roomId = randomUUID();
+    const roomId = room.id;
     const meet = new Meet(user.id, socket, language, roomId);
     this.meets.push(meet);
     (socket as any).roomId = roomId;
@@ -121,6 +122,7 @@ export class Meetmanager {
   endMeeting(roomId: string) {
     for (let i = 0; i < this.meets.length; i++) {
       if (this.meets[i]?.roomId === roomId) {
+        this.meets[i]?.saveToDB(); //writing all the members of a meet into the DB;
         this.meets[i]?.admin.adminSocket.send(
           JSON.stringify({ message: "Meeting ended successfully." }),
         );

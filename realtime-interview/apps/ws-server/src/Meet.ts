@@ -1,5 +1,6 @@
 import { WebSocket } from "ws";
 import { codeInfoType, languageType } from "./utils/types";
+import { prisma } from "@repo/db";
 
 export class Meet {
   public admin: {
@@ -14,8 +15,15 @@ export class Meet {
   //lets consider the coding language is same for all the members
   private codeInfo: codeInfoType;
   private startTime: number;
-  public cleanUpTimer:any;
-  public adminDisconnectedAt:Date | undefined;
+  public cleanUpTimer: any;
+  public adminDisconnectedAt: Date | undefined;
+  private membersMap: Map<
+    string,
+    {
+      joinedAt: number;
+      leftAt?: number;
+    }
+  >;
   constructor(
     adminId: string,
     socket: WebSocket,
@@ -36,12 +44,15 @@ export class Meet {
 
   addMember(id: string, member: WebSocket) {
     this.members.push({ id, member });
+    this.membersMap.set(id, { joinedAt: Date.now() });
+
     member.send(
       JSON.stringify({
         type: "JOINED_ROOM",
         roomId: this.roomId,
       }),
     );
+
     this.sendCode(this.codeInfo);
   }
 
@@ -64,16 +75,35 @@ export class Meet {
       }
     }
 
-    if (removed ) {
+    const member = this.membersMap.get(memberId);
+    member!.leftAt = Date.now();
+    if (removed) {
       return this.admin.adminSocket.send(
         JSON.stringify({ memberId: memberId, message: "Removed the user" }),
       );
     }
   }
 
-  handleAdminRejoin(){
+  handleAdminRejoin() {
     clearTimeout(this.cleanUpTimer);
     this.cleanUpTimer = undefined;
     this.adminDisconnectedAt = undefined;
+  }
+
+  async saveToDB() {
+    const roomMember = [...this.membersMap].map(([userId, value]) => ({
+      roomId: this.roomId,
+      userId: userId,
+      joinedAt: value.joinedAt,
+      leftAt: value.leftAt,
+    }));
+
+    try {
+      await prisma.roomMember.createMany({
+        data: roomMember,
+      });
+    } catch (err) {
+      console.log(err);
+    }
   }
 }

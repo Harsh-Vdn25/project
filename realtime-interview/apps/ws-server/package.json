@@ -15,11 +15,11 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@repo/db": "workspace:*",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/uuid": "^11.0.0",
     "@types/ws": "^8.18.1",
     "jsonwebtoken": "^9.0.3",
-    "uuid": "^13.0.0",
     "ws": "^8.19.0"
   }
 }

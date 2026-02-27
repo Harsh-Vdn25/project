@@ -57,15 +57,13 @@ export class Meetmanager {
     const roomData = this.meets.find((x) => x.roomId === roomId);
 
     if (roomData) {
-      for (let x of this.meets) {
-        if (x.members.find((person) => person.id === user.id)) {
-          return socket.send(
-            JSON.stringify({
-              message: "You already part of the room.",
-              roomId: x.roomId,
-            }),
-          );
-        }
+      const existingSession = roomData.participants.get(user.id);
+      if (existingSession) {
+        existingSession.socket = socket;
+        existingSession.lastSeen = Date.now();
+        return socket.send(
+          JSON.stringify({ message: "You are already part of the room." }),
+        );
       }
       roomData.addMember(user.id, socket);
       (socket as any).roomId = roomId;
@@ -76,7 +74,7 @@ export class Meetmanager {
 
   handleMessage(
     message: {
-      type: messageTypes.SEND_CODE | messageTypes.REMOVE_MEMBER;
+      type: messageTypes.SEND_CODE | messageTypes.REMOVE_MEMBER | messageTypes.END_MEETING;
       roomId: string;
       codeInfo?: codeInfoType;
       memberId?: string;
@@ -116,6 +114,14 @@ export class Meetmanager {
           );
         }
         meet.removeMember(memberId);
+        break;
+      case messageTypes.END_MEETING:
+        if(!message.memberId )return socket.send(JSON.stringify({message: "Invalid request"}));
+        
+        const session = meet?.participants.get(message.memberId);
+        if(!session || session?.role === "USER")return socket.send(JSON.stringify({message: "You can't end the meeting."}));
+        this.endMeeting(message.roomId);
+        break;
     }
   }
 
@@ -126,9 +132,9 @@ export class Meetmanager {
         this.meets[i]?.admin.adminSocket.send(
           JSON.stringify({ message: "Meeting ended successfully." }),
         );
-        this.meets[i]?.members.map((x) =>
-          x.member.send(JSON.stringify({ message: "Meeting ended." })),
-        );
+        this.meets[i]?.participants.forEach((x) => {
+          x.socket.send(JSON.stringify({ message: "Meeting ended." }));
+        });
         this.meets.splice(i, 1);
         break;
       }
@@ -136,7 +142,11 @@ export class Meetmanager {
   }
   callRemoveMember(id: string, roomId: string) {
     const meet = this.meets.find((x) => x.roomId === roomId);
-    if (meet) {
+    if(!meet){
+      return;
+    }
+    const member = meet?.participants.get(id);
+    if(member?.role === "ADMIN"){
       meet.removeMember(id);
     }
   }

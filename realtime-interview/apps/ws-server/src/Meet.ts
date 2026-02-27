@@ -1,5 +1,5 @@
 import { WebSocket } from "ws";
-import { codeInfoType, languageType } from "./utils/types";
+import { codeInfoType, languageType, ParticipantSession } from "./utils/types";
 import { prisma } from "@repo/db";
 
 export class Meet {
@@ -17,13 +17,7 @@ export class Meet {
   private startTime: number;
   public cleanUpTimer: any;
   public adminDisconnectedAt: Date | undefined;
-  private membersMap: Map<
-    string,
-    {
-      joinedAt: number;
-      leftAt?: number;
-    }
-  >;
+  public participants: Map<string, ParticipantSession>;
   constructor(
     adminId: string,
     socket: WebSocket,
@@ -34,6 +28,7 @@ export class Meet {
       id: adminId,
       adminSocket: socket,
     };
+    this.participants = new Map();
     this.members = [];
     this.roomId = roomId;
     this.codeInfo = { language, code: "" };
@@ -44,7 +39,12 @@ export class Meet {
 
   addMember(id: string, member: WebSocket) {
     this.members.push({ id, member });
-    this.membersMap.set(id, { joinedAt: Date.now() });
+    this.participants.set(id, {
+      socket: member,
+      role: "USER",
+      joinedAt: Date.now(),
+      lastSeen: Date.now()
+    });
 
     member.send(
       JSON.stringify({
@@ -74,9 +74,9 @@ export class Meet {
         break;
       }
     }
-
-    const member = this.membersMap.get(memberId);
-    member!.leftAt = Date.now();
+    
+    const member = this.participants.get(memberId);
+    member!.lastSeen = Date.now();
     if (removed) {
       return this.admin.adminSocket.send(
         JSON.stringify({ memberId: memberId, message: "Removed the user" }),
@@ -91,11 +91,11 @@ export class Meet {
   }
 
   async saveToDB() {
-    const roomMember = [...this.membersMap].map(([userId, value]) => ({
+    const roomMember = [...this.participants].map(([userId, value]) => ({
       roomId: this.roomId,
       userId: userId,
       joinedAt: value.joinedAt,
-      leftAt: value.leftAt,
+      leftAt: value!.lastSeen,
     }));
 
     try {

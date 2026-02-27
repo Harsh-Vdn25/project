@@ -49,10 +49,7 @@ async function main() {
           }
           break;
         case messageTypes.END_MEETING:
-          if(user.role === "ADMIN"){
-            if(!message.roomId)return socket.send(JSON.stringify({message: "Need roomId to end_meeting."}));
-            meetManager.endMeeting(message.roomId);
-          }
+          meetManager.handleMessage(message,socket);
           break;
         default:
           socket.send(JSON.stringify({ message: "Unknown message type." }));
@@ -62,12 +59,7 @@ async function main() {
     socket.on('close',()=>{
       const user = (socket as any).user;
       const roomId = (socket as any).roomId;
-
-      if(user.role === "USER" && (!roomId && typeof roomId !== 'string')){
-        meetManager.callRemoveMember(user.id,roomId);
-      }else if(user.role === "ADMIN"){
-        meetManager.handleAdminDisconnect(user.id);
-      }
+      meetManager.callRemoveMember(user.id,roomId);
     })
   });
 }

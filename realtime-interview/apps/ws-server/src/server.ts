@@ -18,7 +18,7 @@ async function main() {
 
     if (decoded.role === "ADMIN" || decoded.role === "USER") {
       (socket as any).user = { id: decoded.id, role: decoded.role };
-      socket.send(JSON.stringify({ message: "Connection successful." }));
+      return socket.send(JSON.stringify({ message: "Connection successful." }));
     }
 
     socket.on("message", (data) => {
@@ -41,23 +41,24 @@ async function main() {
 
         case messageTypes.MESSAGE:
           if (user.role === "ADMIN") {
-            const roomId = message.roomId;
-            const codeInfo = message.codeIndo;
             meetManager.handleMessage(message,socket);
           } else {
             socket.send(JSON.stringify({ message: "Only admin can send." }));
           }
           break;
         case messageTypes.END_MEETING:
-          if(user.role === "ADMIN"){
-            if(!message.roomId)return socket.send(JSON.stringify({message: "Need roomId to end_meeting."}));
-            meetManager.endMeeting(message.roomId);
-          }
+          meetManager.handleMessage(message,socket);
           break;
         default:
           socket.send(JSON.stringify({ message: "Unknown message type." }));
       }
     });
+
+    socket.on('close',()=>{
+      const user = (socket as any).user;
+      const roomId = (socket as any).roomId;
+      meetManager.callRemoveMember(user.id,roomId);
+    })
   });
 }
 main();

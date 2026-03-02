@@ -12,4 +12,26 @@ model User{
     username        String              @unique
     password        String              
     role            String              @default("USER")
+    admin           Room[]              @relation("admin")
+    memberships     RoomMember[]
+}
+
+model Room{
+  id                String              @id @default(uuid())
+  adminId           String
+  startedAt         DateTime            @default(now())
+  endedAt           DateTime?
+  admin             User                @relation("admin",fields: [adminId],references: [id])
+  members           RoomMember[]
+}
+
+model RoomMember{
+  id              String                @id @default(uuid())
+  roomId          String                
+  userId          String
+  joinedAt        DateTime
+  leftAt          DateTime
+  room            Room                  @relation(fields: [roomId],references: [id])
+  user            User                  @relation(fields: [userId],references: [id])
+  @@unique([roomId,userId])
 }

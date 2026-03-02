@@ -9,6 +9,7 @@ export class Meetmanager {
   constructor() {
     this.meets = [];
   }
+
   async createRoom(user: userType, language: languageType, socket: WebSocket) {
     if (user.role !== "ADMIN") {
       return socket.send(
@@ -32,18 +33,23 @@ export class Meetmanager {
         );
       }
     }
-    const room = await prisma.room.create({ data: { adminId: user.id } });
+    try {
+      const room = await prisma.room.create({ data: { adminId: user.id } });
 
-    const roomId = room.id;
-    const meet = new Meet(user.id, socket, language, roomId);
-    this.meets.push(meet);
-    (socket as any).roomId = roomId;
-    socket.send(
-      JSON.stringify({
-        type: "ROOM_CREATED",
-        roomId,
-      }),
-    );
+      const roomId = room.id;
+      const meet = new Meet(user.id, socket, language, roomId);
+      this.meets.push(meet);
+      (socket as any).roomId = roomId;
+      socket.send(
+        JSON.stringify({
+          type: "ROOM_CREATED",
+          roomId,
+        }),
+      );
+    } catch (err) {
+      console.log(err);
+      socket.send(JSON.stringify({ message: "Failed to create a meet." }));
+    }
   }
 
   joinRoom(user: userType, roomId: string, socket: WebSocket) {
@@ -62,7 +68,7 @@ export class Meetmanager {
         existingSession.socket = socket;
         existingSession.lastSeen = Date.now();
         return socket.send(
-          JSON.stringify({ message: "You are already part of the room." }),
+          JSON.stringify({ message: "You are sucessfully added." }),
         );
       }
       roomData.addMember(user.id, socket);
@@ -74,7 +80,10 @@ export class Meetmanager {
 
   handleMessage(
     message: {
-      type: messageTypes.SEND_CODE | messageTypes.REMOVE_MEMBER | messageTypes.END_MEETING;
+      type:
+        | messageTypes.SEND_CODE
+        | messageTypes.REMOVE_MEMBER
+        | messageTypes.END_MEETING;
       roomId: string;
       codeInfo?: codeInfoType;
       memberId?: string;
@@ -82,7 +91,7 @@ export class Meetmanager {
     socket: WebSocket,
   ) {
     const roomId = message.roomId;
-    const adminId = (socket as any).id;
+    const adminId = (socket as any).user.id;
     const meet = this.meets.find(
       (x) => x.roomId === roomId && x.admin.id === adminId,
     );
@@ -116,10 +125,14 @@ export class Meetmanager {
         meet.removeMember(memberId);
         break;
       case messageTypes.END_MEETING:
-        if(!message.memberId )return socket.send(JSON.stringify({message: "Invalid request"}));
-        
+        if (!message.memberId)
+          return socket.send(JSON.stringify({ message: "Invalid request" }));
+
         const session = meet?.participants.get(message.memberId);
-        if(!session || session?.role === "USER")return socket.send(JSON.stringify({message: "You can't end the meeting."}));
+        if (!session || session?.role === "USER")
+          return socket.send(
+            JSON.stringify({ message: "You can't end the meeting." }),
+          );
         this.endMeeting(message.roomId);
         break;
     }
@@ -133,28 +146,31 @@ export class Meetmanager {
           JSON.stringify({ message: "Meeting ended successfully." }),
         );
         this.meets[i]?.participants.forEach((x) => {
-          x.socket.send(JSON.stringify({ message: "Meeting ended." }));
+          x.isActive &&
+            x.socket.send(JSON.stringify({ message: "Meeting ended." }));
         });
         this.meets.splice(i, 1);
         break;
       }
     }
   }
+
   callRemoveMember(id: string, roomId: string) {
     const meet = this.meets.find((x) => x.roomId === roomId);
-    if(!meet){
+    if (!meet) {
       return;
     }
     const member = meet?.participants.get(id);
-    if(member?.role === "ADMIN"){
-      meet.removeMember(id);
+    if (meet.participants.get(id)?.role === "ADMIN") {
+      return this.handleAdminDisconnect(id);
     }
+    meet.removeMember(id);
   }
 
   handleAdminDisconnect(adminId: string) {
     const meet = this.meets.find((x) => x.admin.id === adminId);
     if (!meet) return;
-
+    
     meet.cleanUpTimer = setTimeout(
       () => {
         this.endMeeting(meet.roomId);

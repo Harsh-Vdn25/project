@@ -41,8 +41,6 @@ async function main() {
 
         case messageTypes.MESSAGE:
           if (user.role === "ADMIN") {
-            const roomId = message.roomId;
-            const codeInfo = message.codeIndo;
             meetManager.handleMessage(message,socket);
           } else {
             socket.send(JSON.stringify({ message: "Only admin can send." }));

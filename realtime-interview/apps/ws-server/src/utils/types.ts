@@ -13,4 +13,5 @@ export interface ParticipantSession{
   socket: WebSocket;
   joinedAt: number;
   lastSeen: number;
+  isActive: boolean;
 }

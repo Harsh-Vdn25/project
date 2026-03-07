@@ -1,4 +1,9 @@
 import WebSocket from "ws";
+
+interface AuthSocket extends WebSocket {
+  id: string;
+  role: string;
+}
 export type languageType = "javascript" | "python";
 export interface userType {
   id: string;

@@ -30,7 +30,7 @@ async function main() {
         case messageTypes.CREATE_ROOM:
           meetManager.createRoom(user, message.language, socket); //validate the input later
           break;
-        
+            
           case messageTypes.JOIN_ROOM:
           if (!message.roomId)
             return socket.send(
@@ -54,6 +54,10 @@ async function main() {
       }
     });
 
+    socket.on("pong",()=>{
+      const user = (socket as any).user;
+      meetManager.pong(user.id);
+    })
     socket.on('close',()=>{
       const user = (socket as any).user;
       const roomId = (socket as any).roomId;

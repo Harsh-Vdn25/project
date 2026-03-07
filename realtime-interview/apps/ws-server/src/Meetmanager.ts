@@ -6,8 +6,11 @@ import { prisma } from "@repo/db";
 
 export class Meetmanager {
   private meets: Meet[];
+  private userRoomMap: Map<string, string>;
   constructor() {
     this.meets = [];
+    this.heartBeat();
+    this.userRoomMap = new Map();
   }
 
   async createRoom(user: userType, language: languageType, socket: WebSocket) {
@@ -29,6 +32,12 @@ export class Meetmanager {
           JSON.stringify({
             type: messageTypes.ADMIN_RECONNECTED,
             message: "You reconnected to the room.",
+          }),
+        );
+      } else {
+        return socket.send(
+          JSON.stringify({
+            message: "You can't create two meets simultaneously.",
           }),
         );
       }
@@ -54,16 +63,21 @@ export class Meetmanager {
 
   joinRoom(user: userType, roomId: string, socket: WebSocket) {
     if (user.role !== "USER") {
-      socket.send(
+      return socket.send(
         JSON.stringify({
           message: "You are not a user.",
         }),
       );
     }
+    if (this.userRoomMap.has(user.id))
+      return socket.send(
+        JSON.stringify({ message: "You are already part of a room." }),
+      );
     const roomData = this.meets.find((x) => x.roomId === roomId);
 
     if (roomData) {
       const existingSession = roomData.participants.get(user.id);
+
       if (existingSession) {
         existingSession.socket = socket;
         existingSession.lastSeen = Date.now();
@@ -71,6 +85,7 @@ export class Meetmanager {
           JSON.stringify({ message: "You are sucessfully added." }),
         );
       }
+      this.userRoomMap.set(user.id, roomId);
       roomData.addMember(user.id, socket);
       (socket as any).roomId = roomId;
     } else {
@@ -123,12 +138,11 @@ export class Meetmanager {
           );
         }
         meet.removeMember(memberId);
+        this.userRoomMap.delete(memberId);
         break;
       case messageTypes.END_MEETING:
-        if (!message.memberId)
-          return socket.send(JSON.stringify({ message: "Invalid request" }));
-
-        const session = meet?.participants.get(message.memberId);
+        const adminId = (socket as any).user.id;
+        const session = meet?.participants.get(adminId);
         if (!session || session?.role === "USER")
           return socket.send(
             JSON.stringify({ message: "You can't end the meeting." }),
@@ -153,6 +167,12 @@ export class Meetmanager {
         break;
       }
     }
+
+    for (const [userId, userRoomId] of this.userRoomMap) {
+      if (userRoomId === roomId) {
+        this.userRoomMap.delete(userId);
+      }
+    }
   }
 
   callRemoveMember(id: string, roomId: string) {
@@ -160,22 +180,47 @@ export class Meetmanager {
     if (!meet) {
       return;
     }
-    const member = meet?.participants.get(id);
     if (meet.participants.get(id)?.role === "ADMIN") {
       return this.handleAdminDisconnect(id);
     }
+    this.userRoomMap.delete(id);
     meet.removeMember(id);
   }
 
   handleAdminDisconnect(adminId: string) {
     const meet = this.meets.find((x) => x.admin.id === adminId);
     if (!meet) return;
-    
+
     meet.cleanUpTimer = setTimeout(
       () => {
         this.endMeeting(meet.roomId);
       },
       2 * 60 * 1000,
     );
+  }
+
+  pong(userId: string) {
+    for (const meet of this.meets) {
+      const mem = meet.participants.get(userId);
+      if (mem) {
+        mem.lastSeen = Date.now();
+        mem.isActive = true;
+      }
+    }
+  }
+
+  heartBeat() {
+    setInterval(() => {
+      for (const meet of this.meets) {
+        for (const x of meet.participants.values()) {
+          if (x.socket.isPaused) {
+            x.isActive = false;
+            x.lastSeen = Date.now();
+          } else {
+            x.socket.ping();
+          }
+        }
+      }
+    }, 30_000);
   }
 }

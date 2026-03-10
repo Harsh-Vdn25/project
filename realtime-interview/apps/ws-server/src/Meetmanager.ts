@@ -1,16 +1,28 @@
 import { WebSocket } from "ws";
 import { Meet } from "./Meet";
-import { codeInfoType, languageType, userType } from "./utils/types";
+import {
+  AuthSocket,
+  codeInfoType,
+  languageType,
+  userType,
+} from "./utils/types";
 import { messageTypes } from "./utils/enums";
 import { prisma } from "@repo/db";
 
 export class Meetmanager {
-  private meets: Meet[];
+  private meets: Map<string, Meet>;
   private userRoomMap: Map<string, string>;
   constructor() {
-    this.meets = [];
+    this.meets = new Map();
     this.heartBeat();
     this.userRoomMap = new Map();
+  }
+
+  checkAdmin(id: string) {
+    for (const val of this.meets.values()) {
+      if (val.admin.id === id) return val;
+    }
+    return false;
   }
 
   async createRoom(user: userType, language: languageType, socket: WebSocket) {
@@ -22,7 +34,7 @@ export class Meetmanager {
       );
     }
 
-    const isEngaged = this.meets.find((x) => x.admin.id === user.id);
+    const isEngaged = this.checkAdmin(user.id);
     if (isEngaged) {
       if (isEngaged.cleanUpTimer) {
         isEngaged.admin.adminSocket = socket;
@@ -47,7 +59,7 @@ export class Meetmanager {
 
       const roomId = room.id;
       const meet = new Meet(user.id, socket, language, roomId);
-      this.meets.push(meet);
+      this.meets.set(roomId, meet);
       (socket as any).roomId = roomId;
       socket.send(
         JSON.stringify({
@@ -73,7 +85,7 @@ export class Meetmanager {
       return socket.send(
         JSON.stringify({ message: "You are already part of a room." }),
       );
-    const roomData = this.meets.find((x) => x.roomId === roomId);
+    const roomData = this.meets.get(roomId);
 
     if (roomData) {
       const existingSession = roomData.participants.get(user.id);
@@ -106,14 +118,18 @@ export class Meetmanager {
     socket: WebSocket,
   ) {
     const roomId = message.roomId;
-    const adminId = (socket as any).user.id;
-    const meet = this.meets.find(
-      (x) => x.roomId === roomId && x.admin.id === adminId,
-    );
-
+    const adminId = (socket as AuthSocket).user.id;
+    const meet = this.meets.get(roomId);
     if (!meet)
       return socket.send(
         JSON.stringify({ message: "Please check your info." }),
+      );
+    
+    if (meet.admin.id !== adminId)
+      return socket.send(
+        JSON.stringify({
+          message: "Only admin has the privilage to send messages.",
+        }),
       );
 
     switch (message.type) {
@@ -141,7 +157,6 @@ export class Meetmanager {
         this.userRoomMap.delete(memberId);
         break;
       case messageTypes.END_MEETING:
-        const adminId = (socket as any).user.id;
         const session = meet?.participants.get(adminId);
         if (!session || session?.role === "USER")
           return socket.send(
@@ -153,20 +168,16 @@ export class Meetmanager {
   }
 
   endMeeting(roomId: string) {
-    for (let i = 0; i < this.meets.length; i++) {
-      if (this.meets[i]?.roomId === roomId) {
-        this.meets[i]?.saveToDB(); //writing all the members of a meet into the DB;
-        this.meets[i]?.admin.adminSocket.send(
-          JSON.stringify({ message: "Meeting ended successfully." }),
-        );
-        this.meets[i]?.participants.forEach((x) => {
-          x.isActive &&
-            x.socket.send(JSON.stringify({ message: "Meeting ended." }));
-        });
-        this.meets.splice(i, 1);
-        break;
-      }
-    }
+    const meet = this.meets.get(roomId);
+    meet?.saveToDB();
+    meet?.admin.adminSocket.send(
+        JSON.stringify({ message: "Meeting ended successfully." }),
+    );
+
+    meet?.participants.forEach((x)=>{
+      x.isActive && x.socket.send(JSON.stringify({ message: "Meeting ended." }));
+    })
+    this.meets.delete(roomId);
 
     for (const [userId, userRoomId] of this.userRoomMap) {
       if (userRoomId === roomId) {
@@ -176,7 +187,7 @@ export class Meetmanager {
   }
 
   callRemoveMember(id: string, roomId: string) {
-    const meet = this.meets.find((x) => x.roomId === roomId);
+    const meet = this.meets.get(roomId);
     if (!meet) {
       return;
     }
@@ -188,7 +199,7 @@ export class Meetmanager {
   }
 
   handleAdminDisconnect(adminId: string) {
-    const meet = this.meets.find((x) => x.admin.id === adminId);
+    const meet = this.checkAdmin(adminId);
     if (!meet) return;
 
     meet.cleanUpTimer = setTimeout(
@@ -200,25 +211,28 @@ export class Meetmanager {
   }
 
   pong(userId: string) {
-    for (const meet of this.meets) {
-      const mem = meet.participants.get(userId);
-      if (mem) {
-        mem.lastSeen = Date.now();
-        mem.isActive = true;
-      }
-    }
+    const roomId = this.userRoomMap.get(userId);
+    if(!roomId)return;
+      const userRoom = this.meets.get(roomId)
+      if(!userRoom)return;
+      const user = userRoom.participants.get(userId);
+      if(!user)return;
+      user.isActive = true;
   }
 
   heartBeat() {
     setInterval(() => {
-      for (const meet of this.meets) {
+      for (const [_,meet] of this.meets) {
         for (const x of meet.participants.values()) {
-          if (x.socket.isPaused) {
+          const socket = x.socket as any;
+          if (!socket.Alive) {
             x.isActive = false;
+            x.socket.terminate();
             x.lastSeen = Date.now();
-          } else {
-            x.socket.ping();
+            continue;//skip the ping on the dead socket.
           }
+          socket.Alive = false;
+          x.socket.ping();
         }
       }
     }, 30_000);

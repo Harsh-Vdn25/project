@@ -54,7 +54,12 @@ export class Meet {
       }),
     );
 
-    this.sendCode(this.codeInfo);
+    member.send(
+      JSON.stringify({
+        type: "CODE_SNAPSHOT",
+        codeInfo: this.codeInfo,
+      }),
+    );
   }
 
   sendCode(codeInfo: codeInfoType) {
@@ -77,6 +82,9 @@ export class Meet {
     }
     member!.lastSeen = Date.now();
     member!.isActive = false;
+    if(member.socket.readyState === WebSocket.OPEN){
+      member.socket.close();
+    }
   }
 
   handleAdminRejoin() {
